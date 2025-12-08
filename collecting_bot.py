@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from telegram import Bot, Message, Update
 from telegram.ext import (
@@ -77,6 +78,11 @@ class OpsCollector:
         self._reporting_bot = Bot(token=config.telegram_bot_token_reporting)
         self._ack_cache: dict[tuple[str, str], datetime] = {}
         self._ack_row_index: dict[tuple[str, str], int] = {}
+        try:
+            self._tz = ZoneInfo(config.timezone)
+        except Exception:
+            _LOGGER.warning("Invalid timezone '%s', falling back to UTC", config.timezone)
+            self._tz = timezone.utc
 
     async def health(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Simple health endpoint useful for debugging deployments."""
@@ -106,13 +112,15 @@ class OpsCollector:
         tech_message_date = ""
         tech_message_time = ""
         tech_message_dt = _to_utc_datetime(tech_message.date)
-        if tech_message_dt:
-            tech_message_date = tech_message_dt.date().isoformat()
-            tech_message_time = tech_message_dt.strftime("%H:%M:%S")
+        tech_local_dt = _to_local_datetime(tech_message_dt, self._tz)
+        if tech_local_dt:
+            tech_message_date = tech_local_dt.date().isoformat()
+            tech_message_time = tech_local_dt.strftime("%H:%M:%S")
 
         now_dt = _to_utc_datetime(message.date) or datetime.now(timezone.utc)
-        ticket_date = now_dt.date().isoformat()
-        response_at = now_dt.strftime("%H:%M:%S")
+        now_local_dt = _to_local_datetime(now_dt, self._tz)
+        ticket_date = now_local_dt.date().isoformat() if now_local_dt else ""
+        response_at = now_local_dt.strftime("%H:%M:%S") if now_local_dt else ""
         tech_raw_text = (
             tech_message.caption
             or tech_message.text
@@ -188,7 +196,7 @@ class OpsCollector:
 
             ack_dt = self._ack_cache.get(ack_key, None)
             sla_response_min, sla_status, sla_remaining_min = _compute_sla(tech_message_dt, ack_dt or now_dt)
-            solve_timestamp = now_dt.strftime("%H:%M:%S")
+            solve_timestamp = now_local_dt.strftime("%H:%M:%S") if now_local_dt else ""
             is_oncek_flag = 'true' if ack_dt or self._ack_row_index.get(ack_key) else 'false'
             row = [
                 group_label,
@@ -313,6 +321,13 @@ def _to_utc_datetime(value: datetime | None) -> datetime | None:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _to_local_datetime(value: datetime | None, tz: ZoneInfo) -> datetime | None:
+    """Convert a UTC datetime to the configured local timezone."""
+    if not value:
+        return None
+    return value.astimezone(tz)
 
 
 def _compute_sla(tech_dt: datetime | None, response_dt: datetime | None) -> tuple[str | float, str, str | float]:

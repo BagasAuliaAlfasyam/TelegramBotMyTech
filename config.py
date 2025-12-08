@@ -32,6 +32,7 @@ class Config:
     aws_s3_media_prefix: str
     aws_s3_signature_version: str
     aws_s3_addressing_style: str
+    timezone: str
 
 
 def _require_env(name: str) -> str:
@@ -97,6 +98,8 @@ def load_config() -> Config:
     if addressing_style not in {"virtual", "path"}:
         raise ValueError("AWS_S3_ADDRESSING_STYLE must be 'virtual' or 'path'.")
 
+    timezone_name = os.getenv("TIMEZONE", "Asia/Jakarta").strip() or "Asia/Jakarta"
+
     return Config(
         telegram_bot_token_collecting=collecting_token,
         telegram_bot_token_reporting=reporting_token,
@@ -114,6 +117,7 @@ def load_config() -> Config:
         aws_s3_media_prefix=media_prefix,
         aws_s3_signature_version=signature_version,
         aws_s3_addressing_style=addressing_style,
+        timezone=timezone_name,
     )
 
 
