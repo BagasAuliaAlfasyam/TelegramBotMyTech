@@ -97,6 +97,13 @@ class OpsCollector:
         if not message or not message.text or not message.reply_to_message:
             return
 
+        sender_id = message.from_user.id if message.from_user else None
+        if self._config.allowed_ops_user_ids and (
+            sender_id is None or sender_id not in self._config.allowed_ops_user_ids
+        ):
+            _LOGGER.info("Ignoring message from unauthorized user %s", sender_id)
+            return
+
         if self._config.target_group_collecting and (
             message.chat.id != self._config.target_group_collecting
         ):

@@ -33,6 +33,7 @@ class Config:
     aws_s3_signature_version: str
     aws_s3_addressing_style: str
     timezone: str
+    allowed_ops_user_ids: set[int]
 
 
 def _require_env(name: str) -> str:
@@ -56,6 +57,26 @@ def _optional_int(name: str) -> Optional[int]:
         raise ValueError(
             f"Environment variable '{name}' must be an integer when provided."
         ) from exc
+
+
+def _optional_int_set(name: str) -> set[int]:
+    """Parse a comma-separated list of integers into a set."""
+    raw_value = os.getenv(name)
+    if not raw_value:
+        return set()
+
+    result: set[int] = set()
+    for chunk in raw_value.split(","):
+        cleaned = chunk.strip()
+        if not cleaned:
+            continue
+        try:
+            result.add(int(cleaned))
+        except ValueError as exc:
+            raise ValueError(
+                f"Environment variable '{name}' must be comma-separated integers."
+            ) from exc
+    return result
 
 
 def load_config() -> Config:
@@ -99,6 +120,7 @@ def load_config() -> Config:
         raise ValueError("AWS_S3_ADDRESSING_STYLE must be 'virtual' or 'path'.")
 
     timezone_name = os.getenv("TIMEZONE", "Asia/Jakarta").strip() or "Asia/Jakarta"
+    allowed_ops_user_ids = _optional_int_set("ALLOWED_OPS_USER_IDS")
 
     return Config(
         telegram_bot_token_collecting=collecting_token,
@@ -118,6 +140,7 @@ def load_config() -> Config:
         aws_s3_signature_version=signature_version,
         aws_s3_addressing_style=addressing_style,
         timezone=timezone_name,
+        allowed_ops_user_ids=allowed_ops_user_ids,
     )
 
 
